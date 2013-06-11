@@ -5,7 +5,7 @@ by Tim FitzGerald
 * Twitter: @tfitzgee
 * http://tfitzgerald.ca/
 
-WHAT POLYGLOT DOES
+What Polyglot Does
 -------------------
 Polyglot allows you to:
 
@@ -15,7 +15,7 @@ Polyglot allows you to:
 * Load text appropriate for a given language
 * Present dates and numbers in the appropriate format for a given language
 
-WHAT IT DOESN'T DO
+What it doesn't do
 -------------------
 
 Equally important to using a tool is to understand its limitations.
@@ -40,7 +40,7 @@ Not yet but maybe one day in a later version...
 * It doesn't detect on full domains (e.g. mydomain.com = 'en', monsiteweb.com = 'fr', mijnwebsite.be = 'nl')
 * It doesn't detect on query string variables (e.g. mydomain.com/home?lang=de)
 
-HOW TO USE
+Set Up
 -------------------
 
 1. Install the extension.
@@ -55,7 +55,7 @@ HOW TO USE
 	- If you want to translate your URLs, add keys and values to the $R array (R for routing)
 4. Begin using the tags in your code.
 
-REPLACE TEXT
+Replace Text
 ---------------
 
 	{exp:polyglot key="variable_key" [lang="xx"]}
@@ -72,13 +72,15 @@ REPLACE TEXT
 - Language can be overwritten with the lang parameter
 - If no key is provided, the content of your tag becomes the key (similar to the _e or trans function in WordPress)
 
-	{exp:polyglot}
-		(numeric value)
-	{/exp:polyglot}
+```
+{exp:polyglot}
+	(numeric value)
+{/exp:polyglot}
+```
 
 - See `{exp:polyglot:num}` below
 
-FORMAT NUMBERS
+Format Numbers
 ---------------
 
 	{exp:polyglot:num value="9999.999" [decimals="n"] [currency="y|n|$|..."] [currency_pos="before|after|decimal"] [thousands_sep=" |.|,"] [dec_point=".|,"] [lang="xx"]}
@@ -93,21 +95,23 @@ FORMAT NUMBERS
 - `dec_point` is optional; by default it will take the `dec_point` value from your $L array, or if unset will place a `.` period decimal point. It can only be one character long.
 - Language can be overwritten with the lang parameter
 
-	{exp:polyglot:num [decimals="n"] [currency="y|n|$|..."] [currency_pos="before|after|decimal"] [thousands_sep=" |.|,"] [dec_point=".|,"] [lang="xx"]}
-		(numeric value)
-	{/exp:polyglot:num}
+```
+{exp:polyglot:num [decimals="n"] [currency="y|n|$|..."] [currency_pos="before|after|decimal"] [thousands_sep=" |.|,"] [dec_point=".|,"] [lang="xx"]}
+	(numeric value)
+{/exp:polyglot:num}
+```
 
 - Same as above, but will format the wrapped value
 - If the wrapped value is not numeric, it will return the same value without any formatting
 
-CURRENT LANGUAGE
+Current Language
 ----------------
 
 	{current_lang}
 
 - Returns the language code Polyglot is using while rendering the template, based on the language pattern and default you have provided
 
-TRANSLATE URL
+Translate URL
 ----------------
 
 	{exp:polyglot:path uri="/a/b/c" [domain='n'] [lang='xx']}
@@ -117,7 +121,7 @@ TRANSLATE URL
 	- If you are using sub-domain mode for your language pattern, it will always return the full http://xx.domain.com/...
 - Optional: you can specify another language. Useful for language toggle links!
 
-FORMAT DATE/TIME
+Format Date/Time
 ----------------
 
 	{exp:polyglot:date var="datetime" format="x" [lang='xx']}
@@ -132,7 +136,7 @@ FORMAT DATE/TIME
 - Any month names (e.g. 'January'), weekday names ('Monday') or abbreviations ('Jan', 'Mon') will be translated using your glossary file (e.g. if you have `'Jan' => 'Jän.', 'Thu' => 'Do.'` and your format was `D j. M Y` then 2013-01-03 ("Thu 3 Jan 2013" in English) would be rendered `Do. 3 Jän. 2013`)
 - Note: this function does nothing special with handling different timezones (e.g. won't convert a date/time in US Eastern Standard Time (GMT-5) to Central European Time (GMT+1))
 
-TIPS
+Tips
 ---------------
 
 - When in first-segment mode, consider using the add-on Freebie (http://dvt.ee/freebie) by Doug Avery. You can tell EE to ignore your language codes
@@ -141,10 +145,10 @@ TIPS
 - I recommend using standard language tags and subtags as your `lang` variables. This is practical as it allows you to identify your content (e.g. `<html lang="{current_lang}">` dynamically as you go)
 	- W3C has a (surprisingly) good reference doc for this: (http://www.w3.org/International/questions/qa-choosing-language-tags)
 
-CREDITS
+Credits
 ---------------
 
 Special thanks go to:
 
-- Patrick Stinnet for making PS Languish, which acted as a starting point for this project, and for his immeasurable help getting me into EE;
+- Patrick Stinnett for making PS Languish, which acted as a starting point for this project, and for his immeasurable help getting me into EE;
 - Doug Avery for giving the world Freebie, which I use hand in hand with for this in first-segment mode.
