@@ -215,8 +215,6 @@ Initial release.
 
 # Roadmap
 ## Short-Term
-*_ to private methods
-* lang() for extension labels
 * add parameter to turn hiding seg_1 on or off
 * add param to disable entire add-on
 * Bug fixes, as reported
