@@ -4,7 +4,7 @@ $plugin_info = array(
   'pi_name' => 'Polyglot',
   'pi_version' =>'0.1',
   'pi_author' =>'Tim FitzGerald',
-  'pi_author_url' => 'http://tfitzgerald.ca/',
+  'pi_author_url' => 'https://github.com/tfitzgeraldca/Polyglot',
   'pi_description' => 'Language control tools',
   'pi_usage' => Polyglot::usage()
   );

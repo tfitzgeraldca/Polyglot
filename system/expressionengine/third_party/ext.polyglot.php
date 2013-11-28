@@ -7,7 +7,7 @@ class Polyglot_ext
     var $version        = '0.1';
     var $description    = 'Language control tools';
     var $settings_exist = 'y';
-    var $docs_url       = 'http://tfitzgerald.ca/'; // 'http://ellislab.com/expressionengine/user-guide/';
+    var $docs_url       = 'https://github.com/tfitzgeraldca/Polyglot'; // 'http://ellislab.com/expressionengine/user-guide/';
 
     var $settings       = array();
     var $translation_path = '';
