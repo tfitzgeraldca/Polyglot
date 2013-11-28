@@ -1,6 +1,7 @@
-<?php
+<?php if ( ! defined('BASEPATH')) exit('No direct script access allowed');
 
-class Polyglot_ext {
+class Polyglot_ext
+{
 
     var $name       = 'Polyglot';
     var $version        = '0.1';
@@ -9,10 +10,11 @@ class Polyglot_ext {
     var $docs_url       = 'http://tfitzgerald.ca/'; // 'http://ellislab.com/expressionengine/user-guide/';
 
     var $settings       = array();
-    var $translation_path = "";
-    var $language       = "";
+    var $translation_path = '';
+    var $language       = '';
     var $lexicon        = array();
     var $segments       = array();
+    var $functions      = null;
 
     /**
      * Constructor
@@ -24,7 +26,15 @@ class Polyglot_ext {
         $this->settings = $settings;
         $this->EE =& get_instance();
 
-        $this->translation_path = $this->EE->config->config['tmpl_file_basepath'];
+        $this->EE->cache['polyglot']['default_language'] = ( is_array($settings) ? $settings['default_language'] : '' );
+
+        $this->EE->cache['polyglot']['settings'] = $settings;
+
+        if ( ! class_exists('Polyglot_Helper'))
+        {
+            require_once PATH_THIRD.'polyglot/polyglot_helper.php';
+        }
+        $this->functions = new Polyglot_Helper;
     }
 
     /**
@@ -41,13 +51,15 @@ class Polyglot_ext {
     {
         $this->settings = array(
             'language_pattern'   => 'none',
-            'default_language'  => ''
+            'default_language'  => '',
+            'cldr_json_path' => PATH_THIRD_THEMES.'polyglot/json',
+            'language_path' => APPPATH.'language',
+            'variable_prefix' => 'polyglot:'
         );
-
 
         $data = array(
             'class'     => __CLASS__,
-            'method'    => 'load_language_file',
+            'method'    => 'init_polyglot',
             'hook'      => 'sessions_start',
             'settings'  => serialize($this->settings),
             'priority'  => 10,
@@ -106,9 +118,11 @@ class Polyglot_ext {
     {
         $settings = array();
 
-        // Creates a set of radio buttons, one for "Yes" (y), one for "No" (n) and a default of "Yes"
-        $settings['language_pattern']      = array('r', array('sd' => "sub-domain", 'segment' => "first segment", 'none' => "none"), 'none');
-        $settings['default_language']      = array('i', "", '');
+        $settings['language_pattern']   = array('r', array('sd' => 'sub-domain', 'segment' => 'first segment', 'none' => 'none'), 'none');
+        $settings['default_language']   = array('i', '', '');
+        $settings['cldr_json_path']     = array('i','', PATH_THIRD_THEMES.'polyglot/json');
+        $settings['language_path']      = array('i', '', APPPATH.'language');
+        $settings['variable_prefix']    = array('i', '', 'polyglot:');
 
         // General pattern:
         //
@@ -122,51 +136,172 @@ class Polyglot_ext {
         return $settings;
     }
 
-    function get_language() {
-        if(isset($this->settings['language_pattern'])) {
-            $language_pattern = $this->settings['language_pattern'];
-            $detected_language = "";
+    function init_polyglot()
+    {
+        //Load available language settings
+        $this->load_languages();
 
-            switch ($language_pattern) {
+        //Get requested language
+        $this->get_language_from_pattern();
+
+        //Match requested language to available languages
+        $this->EE->cache['polyglot']['current_lang'] = $this->functions->find_closest_locale($this->language);
+
+            //Handle no matches found
+            //TODO
+
+        //Load default language file
+        $this->functions->load_lexicon_file();
+
+        //TODO: Check if we want to pre-load any CLDR files
+
+        //Set early-parsed variables
+        //TODO
+        $prefix = $this->settings['variable_prefix'];
+        $this->EE->config->_global_vars[$prefix.'current_lang'] = $this->language;
+        $this->EE->config->_global_vars[$prefix.'lang'] = $this->language;
+        $ee_language = $this->EE->cache['polyglot']['lang_settings'][$this->language]['ee_langauge'];
+        $this->EE->config->_global_vars[$prefix.'language'] = $ee_language;
+        $this->EE->config->set_item('deft_lang', $ee_language);
+        $this->EE->config->set_item('xml_lang', $this->language);
+
+
+        //Set HTTP Language Header
+        $this->functions->set_http_content_language($this->EE->cache['polyglot']['current_lang']);
+
+        //Handle re-routing
+        $this->reroute_uri();
+
+        //DEBUG
+        //echo 'Profile Trigger: '.$this->EE->config->item('profile_trigger') . '\n'.
+        //        'Reserved Category Word: ' . $this->EE->config->item('reserved_category_word').'\n';
+        //print_r($this->EE->cache['polyglot']);
+    }
+
+
+    /**
+     * Returns the language key according to the language pattern selected
+     * @return the language detected
+     */
+    function get_language_from_pattern()
+    {
+        if(isset($this->settings['language_pattern']))
+        {
+            $language_pattern = $this->settings['language_pattern'];
+            $detected_language_url = '';
+
+            switch ($language_pattern)
+            {
                 case 'segment':
-                    $detected_language = array_shift(explode("/",substr($_SERVER['REQUEST_URI'],1)));
+                    $detected_language_url = array_shift(explode('/', $this->EE->uri->uri_string));
                     break;
                 case 'sd':
-                    $detected_language = array_shift(explode(".",$_SERVER['HTTP_HOST']));
+                    $detected_language_url = array_shift(explode('.', $_SERVER['HTTP_HOST']));
                     break;
                 case 'none':
                 default:
-                    $detected_language = "";
+                    $detected_language_url = '';
                     break;
             }
 
-            if($detected_language == "") {
-                $detected_language = $this->settings['default_language'];
+            if ($detected_language_url == '')
+            {
+                $detected_language_url = $this->settings['default_language'];
+            }
+            else
+            {
+                //Check the available languages, and see if any of them have a lang_url defined that this should correspond to
+                $found_language_url = '';
+                foreach ($this->EE->cache['polyglot']['url_lang'] as $defined_lang => $defined_lang_url)
+                {
+                    if ($detected_language_url == $defined_lang_url)
+                    {
+                        $found_language_url = $defined_lang;
+                    }
+                }
+                if ($found_language_url == '')
+                {
+                    $detected_language_url = $this->settings['default_language'];
+                }
+                else
+                {
+                    $detected_language_url = $found_language_url;
+                }
             }
 
-            $this->language = $detected_language;
-            $this->EE->config->_global_vars['current_lang'] = $this->language;
-            return $detected_language;
+            $this->language = $detected_language_url;
+            return $detected_language_url;
         }
     }
 
-    function load_language_file($lang = "") {
-        if (!is_string($lang)) {
-            $lang = $this->get_language();
-        }
+    function load_languages()
+    {
+        $language_dirs = array_filter( glob($this->settings['language_path'].'/*'), 'is_dir' );
 
-        if( file_exists($this->translation_path.'/lang.'.$lang.'.php') )
+        foreach ($language_dirs as $dir)
         {
-            include($this->translation_path.'/lang.'.$lang.'.php');
+            //Load config file for this language
+            $configfile = $dir.'/'.$this->EE->config->item('site_short_name') . '_config.php';
+            if (file_exists($configfile))
+            {
+                $lang_config = array();
+                include($configfile);
 
-            $this->lexicon[$lang] = (is_array($L)?$L : array());
-
-            $this->segments[$lang] = (is_array($S)?$S : array());
+                $lang_config['file_path'] = $dir;
+                $this->EE->cache['polyglot']['lang_settings'][$lang_config['lang']] = $lang_config;
+                $this->EE->cache['polyglot']['lang'][$lang_config['lang']] = $lang_config['lang'];
+                $this->EE->cache['polyglot']['url_lang'][$lang_config['lang']] = (isset($lang_config['url_lang']) ? $lang_config['url_lang'] : $lang_config['lang']);
+            }                
         }
     }
 
+    function reroute_uri()
+    {
+        //Check if we are a place where we use EE URI template routing (e.g. not in the Control Panel)
+        if (isset($this->EE->uri->uri_string))
+        {
+            $lang = $this->EE->cache['polyglot']['current_lang'];
+            $original_uri = $this->EE->uri->uri_string;
+
+            //Store Original URI and make early-parsed variables of them?
+            $uri_array = explode('/', $original_uri);
+            for ($i = 0; $i < 11; $i++)
+            {
+                    $value = (isset($uri_array[$i])) ? $uri_array[$i] : '';
+                    $count = $i + 1;
+                    $this->EE->config->_global_vars[$this->settings['variable_prefix']. 'segment_' . $count] = $value;
+            }
+
+            //TODO: replace segment keywords
+            //$this->EE->config->item('profile_trigger');
+            //$this->EE->config->item('reserved_category_word');
+
+            //If you're using first-segment language identifier (e.g. /en and /fr)
+            //Remove that first segment from the equation
+
+            $url_params = $this->functions->remove_and_store_params();
+
+            //Get original URI
+            $new_uri = $this->functions->translate_uri($original_uri, $lang, 'to_origin');
+
+            //Apply original URI
+            $this->EE->uri->uri_string = $new_uri;
+            $this->EE->uri->uri_string .= $url_params;
+
+            //TODO: Necessary? Doug Avery had this...
+            //$this->EE->uri->uri_string = $this->EE->uri->uri_string;
+
+            //Submit new URI for parsing
+            $this->EE->uri->segments = array();
+            $this->EE->uri->rsegments = array();
+            $this->EE->uri->_explode_segments();
+            $this->EE->uri->_reindex_segments();
+
+            //TODO: Output for EE Debug Toolbar?
+
+        }
+
+    }
 
 }
 // END CLASS
-
-?>
