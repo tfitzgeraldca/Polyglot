@@ -137,6 +137,13 @@ class Polyglot_Helper {
 
     function cldr($type, $lang)
     {
+        //Get CLDR locale if there is one set in the config
+        if (isset($this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale']))
+        {
+            $lang = $this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale'];
+        }
+
+
         if ( ! isset($this->EE->cache['polyglot']['cldr']) )
         {
             $this->EE->cache['polyglot']['cldr'] = (object) array();
