@@ -27,6 +27,8 @@ class Polyglot {
 	{
 		global $TMPL;
 		$this->EE =& get_instance();
+		$this->EE->load->library('logger');
+
 		$TMPL = $this->EE->TMPL;
 
 
@@ -90,14 +92,15 @@ class Polyglot {
 		global $TMPL;
 		$lang = ($TMPL->fetch_param('lang') ? $TMPL->fetch_param('lang') : $this->lang());
 		$numbers_loaded = $this->functions->cldr('numbers', $lang);
+		$cldr_locale = (isset($this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale']) ? $this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale'] : $lang);
 
 		$decimals = ((int)$TMPL->fetch_param('decimals') ? (int)$TMPL->fetch_param('decimals') : 0);
 		
 		if ($numbers_loaded)
 		{
-			$dec_point = $this->EE->cache['polyglot']['cldr']->main->{$lang}->numbers->{'symbols-numberSystem-latn'}->decimal;
-			$percent_sign = $this->EE->cache['polyglot']['cldr']->main->{$lang}->numbers->{'symbols-numberSystem-latn'}->percentSign;
-			$thousands_sep =  $this->EE->cache['polyglot']['cldr']->main->{$lang}->numbers->{'symbols-numberSystem-latn'}->group;
+			$dec_point = $this->EE->cache['polyglot']['cldr']->main->{$cldr_locale}->numbers->{'symbols-numberSystem-latn'}->decimal;
+			$percent_sign = $this->EE->cache['polyglot']['cldr']->main->{$cldr_locale}->numbers->{'symbols-numberSystem-latn'}->percentSign;
+			$thousands_sep =  $this->EE->cache['polyglot']['cldr']->main->{$cldr_locale}->numbers->{'symbols-numberSystem-latn'}->group;
 		}
 		else
 		{
@@ -116,7 +119,7 @@ class Polyglot {
 		}
 
 		
-		$currency_unit = substr(strtoupper($TMPL->fetch_param('currency')), 0, 3);
+		$currency_unit = $TMPL->fetch_param('currency');
 		$is_currency = $currency_unit != '';
 		$currency_pos = $TMPL->fetch_param('currency_pos');
 		$value = ($TMPL->fetch_param('value') ? $TMPL->fetch_param('value') : $TMPL->tagdata);
@@ -124,7 +127,7 @@ class Polyglot {
 		//Only bother with this if the value is numeric; repeat the given value if not
 		if (is_numeric($value))
 		{
-			$numbers_data = $this->EE->cache['polyglot']['cldr']->main->{$lang}->numbers;
+			$numbers_data = $this->EE->cache['polyglot']['cldr']->main->{$cldr_locale}->numbers;
 
 			//If we're handling a currency
 			if ($is_currency)
@@ -134,7 +137,15 @@ class Polyglot {
 				if ($currency_loaded)
 				{
 					$currency_data = $this->EE->cache['polyglot']['cldr']->supplemental->currencyData;
-					$currency_symbol = $numbers_data->currencies->{$currency_unit}->symbol;
+					if (property_exists($numbers_data->currencies, strtoupper($currency_unit)))
+					{
+						$currency_unit = strtoupper($currency_unit);
+						$currency_symbol = $numbers_data->currencies->{$currency_unit}->symbol;
+					}
+					else
+					{
+						$currency_symbol = $currency_unit;
+					}
 					$currency_format = $numbers_data->{'currencyFormats-numberSystem-latn'}->{'standard'}->currencyFormat;
 					if (property_exists($currency_data->fractions, $currency_unit))
 					{
@@ -146,12 +157,6 @@ class Polyglot {
 				//Override default decimals to 2
 				if ($TMPL->fetch_param('decimals') == '')
 					$decimals = 2;
-
-				//Override symbol
-				if ($TMPL->fetch_param('symbol') != '')
-				{
-					$currency_symbol = $TMPL->fetch_param('symbol');
-				}
 
 				//TODO Get position of currency symbol and position it
 				$currency_pos = 'before';
@@ -195,9 +200,11 @@ class Polyglot {
 		global $TMPL;
 		$lang = ($TMPL->fetch_param('lang') ? $TMPL->fetch_param('lang') : $this->lang());
 		$format = $TMPL->fetch_param('format');
-		$var = $TMPL->fetch_param('var');
+		$value =  ($TMPL->fetch_param('value') ? $TMPL->fetch_param('value') : $TMPL->tagdata);
 		$wrap_html5 = strtolower(substr($TMPL->fetch_param('wrap_html5'), 0, 1)) == 'y';
 		$timezone = ($TMPL->fetch_param('tz') ? $TMPL->fetch_param('tz') : $this->EE->config->item('default_site_timezone'));
+		$cldr_locale = (isset($this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale']) ? $this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale'] : $lang);
+
 
 		//Load a date-time object, adjusted for date-time (PHP 5)
 		try
@@ -205,42 +212,49 @@ class Polyglot {
 			$tz_obj = new DateTimeZone($timezone);
 		} catch (Exception $e) {
 			//TODO Log invalid date time error
+			$this->EE->logger->developer('Warning: timezone provided ('.$timezone.') couldn\'t be found, using EE default timezone.');
 			$tz_obj = new DateTimeZone($this->EE->config->item('default_site_timezone'));
 			//Assuming that EE's timezone is legit.
 		}
 
 		//Get date-time
 			//If var is not set, load current date/time
-			if ( ! $var)
+			if ( ! $value)
 			{
 				$datetime = $this->EE->localize->now;
 			}
 			else
 			{
 				//If numeric, we assume it's a Unix timestamp in UTC time
-				if (is_numeric($var))
-					$datetime = (int) $var;
+				if (is_numeric($value))
+				{
+					$datetime = (int) $value;
+				}
 				//If not we convert the text date/time, using EE's default timezone reference
 				else
 				{
 					//EE 2.6+
 					if (version_compare(APP_VER, '2.6', '>='))
 					{
-						$datetime = $this->EE->localize->string_to_timestamp($var);
+						$datetime = $this->EE->localize->string_to_timestamp($value);
 					}
 					else
 					{
-						$datetime = $this->EE->localize->convert_human_date_to_gmt($var);
+						$datetime = $this->EE->localize->convert_human_date_to_gmt($value);
 					}
 				}
 
 				//If there's no timestamp as a result, then use the current time in UTC
 				if ( ! $datetime)
+				{
 					$datetime = $this->EE->localize->now;
+					$this->EE->logger->developer("Warning: time couldn't be read, using current time instead.");
+				}
 			}
 
 		//Build date-time object
-		$dt_obj = new DateTime(date('u', $datetime), $tz_obj);
+		$dt_obj = new DateTime(date('r', $datetime));
+		$dt_obj->setTimezone($tz_obj);
 
 		//Load CLDR data
 		$datetime_cldr = $this->functions->cldr('datetime', $lang);
@@ -252,7 +266,7 @@ class Polyglot {
 			//Return ISO format
 			return $dt_obj->format('c');
 		}
-		$calendar = $this->EE->cache['polyglot']['cldr']->main->{$lang}->dates->calendars->gregorian;
+		$calendar = $this->EE->cache['polyglot']['cldr']->main->{$cldr_locale}->dates->calendars->gregorian;
 
 
 		//If no format is provided, treat it as a short CLDR format
@@ -283,13 +297,13 @@ class Polyglot {
 				$cldr_format_code = $calendar->timeFormats->{$format};
 			}
 			$format = $cldr_format_code;
-			$output = $this->_cldr_dt_format($format, $lang, $dt_obj);
+			$output = $this->_cldr_dt_format($format, $cldr_locale, $dt_obj);
 		}
 		else if (in_array($format, $cldr_available_formats))
 		{
 			//TODO Log replacement in format
 			$format = $calendar->dateTimeFormats->availableFormats->{$format};
-			$output = $this->cldr_dt_format($format, $lang, $dt_obj);
+			$output = $this->_cldr_dt_format($format, $cldr_locale, $dt_obj);
 		}
 		//If none of the default CLDR format codes are used, then use EE's code formatting (using EE's localization)
 		else
@@ -598,7 +612,7 @@ class Polyglot {
 				'lang'  => $lang,
 				'is_active' => ($lang == $current_lang),
 				'cldr_locale' => isset($settings['cldr_locale']) ? $settings['cldr_locale'] : $lang,
-				'url_lang' => $settings['url_lang'],
+				'url_lang' => isset($settings['url_lang']) ? $settings['url_lang'] : $lang,
 				'name' => $settings['lang_name'],
 				'dir' => $settings['dir'],
 				'ee_language' => isset($settings['ee_language']) ? $settings['ee_language'] : "english"
