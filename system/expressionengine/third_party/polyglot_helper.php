@@ -34,7 +34,7 @@ class Polyglot_Helper {
     */
     public function find_closest_locale($name = '') {
     
-        if ($name == '')
+        if ($name === '')
         {
             $name = $_SERVER['HTTP_ACCEPT_LANGUAGE'];
         }
@@ -43,7 +43,8 @@ class Polyglot_Helper {
         $cultures = $this->EE->cache['polyglot']['lang'];
 
         if ( ! $name) {
-            //TODO return default culture;
+            //Return default culture;
+            return $this->EE->cache['polyglot']['settings']['default_language'];
         }
         if (is_string($name)) {
             $name = explode( ',', $name );
@@ -354,9 +355,25 @@ class Polyglot_Helper {
         $paths = array();
         $paths = $this->EE->cache['polyglot']['lang_settings'][$lang]['segments'];
 
-        //If we're looking to go from translated path to original path, then invert these variables
         if ($direction == 'to_origin')
         {
+            //Check if there is already a Page URI defined; don't try back-translating it if it's there
+            $site_pages = $this->EE->config->item('site_pages');
+            if (isset($site_pages[1]))
+            {
+                $page_uris = $site_pages[1]['uris'];
+
+                if (in_array('/'.$uri, $page_uris))
+                {
+                    return $uri;
+                }
+            }
+            else
+            {
+                $page_uris = array();
+            }
+
+            //If we're looking to go from translated path to original path, then invert these variables
             $paths = array_flip($paths);
         }
 
@@ -409,37 +426,54 @@ class Polyglot_Helper {
         //If moving to the original path and language detection pattern is by first segment, you need to remove that segment
         $url_lang = $this->EE->cache['polyglot']['url_lang'][$lang];
         $pattern = $this->EE->cache['polyglot']['settings']['language_pattern'];
-        $new_uri = "";
+        $new_uri = '';
 
         if ($direction == 'to_origin')
         {
             if ($pattern == 'segment' && $url_lang == $new_uri_segments[0])
             {
                 array_shift($new_uri_segments);
-                $new_uri = '/'.implode('/',$new_uri_segments);
             }
-            else
-            {
-                $new_uri = '/'.implode('/',$new_uri_segments);
-            }
+            $new_uri = '/'.implode('/',$new_uri_segments);
         }
         //If you're putting a translated path, add the language pattern
         else
         {
-            if ($pattern == 'segment' && $absolute_path == FALSE)
+            $site_url = $this->EE->config->item('site_url').$this->EE->config->item('site_index');
+            $site_url_components = parse_url($site_url);
+            if ( ! isset($site_url_components['scheme']))
+            {
+                $site_url_components['scheme'] = 'http'.(isset($_SERVER['HTTPS'])?'s':'');
+            }
+            if ( ! isset($site_url_components['host']))
+            {
+                $host = $_SERVER['HTTP_HOST'];
+                if (strncasecmp($url_lang, $host, strlen($url_lang)) == 0)
+                {
+                    $site_url_components['host'] = $url_lang.substr($host, strlen($url_lang));
+                }
+                else
+                {
+                    $site_url_components['host'] = $url_lang.$host;
+                }
+            }
+
+            //Add the language segment if we're using segments
+            if ($pattern == 'segment')
             {
                 array_unshift($new_uri_segments, $url_lang);
-                $new_uri = '/'.implode('/',$new_uri_segments);
             }
-            else if ($pattern == 'sd' OR $absolute_path == TRUE)
+            $new_uri = '/'.$site_url_components['path'].'/'.implode('/', $new_uri_segments);
+            $new_uri = preg_replace('/\/(?:\/+)/', '/', $new_uri);
+
+            //If abs path, or if subdomain and not the same language
+            if ($pattern == 'sd' && ($absolute_path OR ! $url_lang != $this->EE->cache['polyglot']['current_lang']))
             {
-                if (array_shift(explode('.',$_SERVER['HTTP_HOST'])) != $url_lang)
-                {
-                    $domain = explode('.',$_SERVER['HTTP_HOST']);
-                    array_shift($domain);
-                    $uri_prefix = 'http'.(isset($_SERVER['HTTPS'])?'s':'').'://'.$url_lang.implode('.',$domain);
-                    $new_uri = $base_uri.$new_uri_segments;
-                }
+                $new_uri = $site_url_components['scheme'].'://'.$url_lang.'.'.$site_url_components['host'].$site_url_components['path'].$new_uri;
+            }
+            if ($pattern == 'segment' && $absolute_path)
+            {
+                $new_uri = $site_url_components['scheme'].'://'.$site_url_components['host'].$site_url_components['path'].$new_uri;
             }
         }
 
