@@ -11,7 +11,6 @@ class Polyglot_ext
 
     var $settings       = array();
     var $translation_path = '';
-    var $language       = '';
     var $lexicon        = array();
     var $segments       = array();
     var $functions      = null;
@@ -138,32 +137,54 @@ class Polyglot_ext
 
     function init_polyglot()
     {
+        $var_prefix = $this->settings['variable_prefix'];
+
+        //Get start time (for logging puroses)
+        $start_time = microtime(TRUE);
+
         //Load available language settings
         $this->load_languages();
 
         //Get requested language
-        $this->get_language_from_pattern();
+        $current_lang = $this->get_language_from_pattern();
 
-        //Match requested language to available languages
-        $this->EE->cache['polyglot']['current_lang'] = $this->functions->find_closest_locale($this->language);
+        //Handle no matches found
+        if($current_lang == '')
+        {
+            //Use default language if one is provided
+            if($this->settings['default_language'] != '')
+            {
+                $current_lang = $this->settings['default_language'];
+            }
+            //If no default is provided, set variables to empty and stop processing
+            else
+            {
+                $this->EE->config->_global_vars[$var_prefix.'current_lang'] = '';
+                $this->EE->config->_global_vars[$var_prefix.'lang'] = '';
+                $this->EE->config->_global_vars[$var_prefix.'url_lang'] = '';
+                $this->EE->config->_global_vars[$var_prefix.'language'] = '';
+                for($i = 1; $i <= 10; $i++)
+                {
+                    $this->EE->config->_global_vars[$var_prefix.'segment_'.$i] = '';
+                }
+                return;
+            }
+        }
 
-            //Handle no matches found
-            //TODO
+        $this->EE->cache['polyglot']['current_lang'] = $current_lang;
 
         //Load default language file
         $this->functions->load_lexicon_file();
 
-        //TODO: Check if we want to pre-load any CLDR files
-
         //Set early-parsed variables
         //TODO
-        $prefix = $this->settings['variable_prefix'];
-        $this->EE->config->_global_vars[$prefix.'current_lang'] = $this->language;
-        $this->EE->config->_global_vars[$prefix.'lang'] = $this->language;
-        $ee_language = $this->EE->cache['polyglot']['lang_settings'][$this->language]['ee_langauge'];
-        $this->EE->config->_global_vars[$prefix.'language'] = $ee_language;
+        $this->EE->config->_global_vars[$var_prefix.'current_lang'] = $current_lang;
+        $this->EE->config->_global_vars[$var_prefix.'lang'] = $current_lang;
+        $this->EE->config->_global_vars[$var_prefix.'url_lang'] = $this->EE->cache['polyglot']['lang_settings'][$current_lang]['url_lang'];
+        $ee_language = $this->EE->cache['polyglot']['lang_settings'][$current_lang]['ee_langauge'];
+        $this->EE->config->_global_vars[$var_prefix.'language'] = $ee_language;
         $this->EE->config->set_item('deft_lang', $ee_language);
-        $this->EE->config->set_item('xml_lang', $this->language);
+        $this->EE->config->set_item('xml_lang', $current_lang);
 
 
         //Set HTTP Language Header
@@ -176,6 +197,10 @@ class Polyglot_ext
         //echo 'Profile Trigger: '.$this->EE->config->item('profile_trigger') . '\n'.
         //        'Reserved Category Word: ' . $this->EE->config->item('reserved_category_word').'\n';
         //print_r($this->EE->cache['polyglot']);
+        //print_r($this->EE);
+
+        //Report execution time
+        log_message('Polyglot: '.sprintf($this->EE->lang->line('polyglot_ext_exec_time'), (microtime(TRUE)-$start_time)), 'INFO');
     }
 
 
@@ -229,7 +254,6 @@ class Polyglot_ext
                 }
             }
 
-            $this->language = $detected_language_url;
             return $detected_language_url;
         }
     }
@@ -249,7 +273,12 @@ class Polyglot_ext
 
                 $lang_config['file_path'] = $dir;
                 $this->EE->cache['polyglot']['lang_settings'][$lang_config['lang']] = $lang_config;
+                if ( ! isset($lang_config['url_lang']))
+                {
+                    $this->EE->cache['polyglot']['lang_settings'][$lang_config['lang']]['url_lang'] = $lang_config['lang'];
+                }                    
                 $this->EE->cache['polyglot']['lang'][$lang_config['lang']] = $lang_config['lang'];
+
                 $this->EE->cache['polyglot']['url_lang'][$lang_config['lang']] = (isset($lang_config['url_lang']) ? $lang_config['url_lang'] : $lang_config['lang']);
             }                
         }
