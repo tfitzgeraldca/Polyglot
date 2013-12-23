@@ -38,31 +38,45 @@ class Polyglot {
         }
         $this->functions = new Polyglot_Helper;
 
-		$lang = $this->lang();
-		$lexicon = $this->EE->cache['polyglot']['lexicon'][$lang];
-
 		$key = $TMPL->fetch_param('key');
 		if ($key == '')
 			$key = $TMPL->tagdata;
 
-		$domain = $TMPL->fetch_param('domain');
-		if ($domain == '')
-			$domain = $this->EE->config->item('site_short_name');
-
 		$data = '';
 
-		if ( ! is_numeric($key))
+		//Handle string conversion
+		//Limiting key lengths to 50, to prevent longer encapsulated pair tag data (such as perhaps within {exp:polyglot:languages} from entering here)
+		if ( ! is_numeric($key) && $key != '' && strlen($key) < 50)
 		{
-			if (isset($lexicon))
+			//Get parameters
+			$lang = $TMPL->fetch_param('lang', $this->lang());
+			
+			//Return tag contents if there is no lang value
+			if ($lang == '')
 			{
-				if (isset($lexicon[$domain]))
+				$this->return_data = $TMPL->tagdata;
+				return false;
+			}
+
+			if ( ! isset($this->EE->cache['polyglot']['lexicon'][$lang]))
+				$this->EE->cache['polyglot']['lexicon'][$lang] = array();
+
+			$lexicon = $this->EE->cache['polyglot']['lexicon'][$lang];
+
+			$glossary = $TMPL->fetch_param('glossary', $this->EE->config->item('site_short_name'));
+
+			if ( ! isset($lexicon[$glossary]))
+			{
+				$this->functions->load_lexicon_file($lang, $glossary);
+				$lexicon[$glossary] = $this->EE->cache['polyglot']['lexicon'][$lang][$glossary];
+			}
+			if (isset($lexicon[$glossary]))
+			{
+				if (isset($lexicon[$glossary][$key]))
 				{
-					if (isset($lexicon[$domain][$key]))
-					{
-						$data = $lexicon[$domain][$key];
-					}
+					$data = $lexicon[$glossary][$key];
 				}
-			}			
+			}
 		}
 
 		if ($data == '')
@@ -74,9 +88,12 @@ class Polyglot {
 				$data = $this->num($key);
 			//if it is not anything else
 			else
-				$data =  $this->EE->TMPL->tagdata;
+				$data =  $TMPL->tagdata;
 		}
-		$this->return_data = $data;
+
+		//if ($data == '')
+		//	$this->return_data = $this->EE->TMPL->no_results();
+			$this->return_data = $data;
 	}
 
 	public function lang()
@@ -91,6 +108,13 @@ class Polyglot {
 	{
 		global $TMPL;
 		$lang = ($TMPL->fetch_param('lang') ? $TMPL->fetch_param('lang') : $this->lang());
+
+		//Return tag contents if there is no lang value
+		if ($lang == '')
+		{
+			return $TMPL->tagdata;
+		}
+
 		$numbers_loaded = $this->functions->cldr('numbers', $lang);
 		$cldr_locale = (isset($this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale']) ? $this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale'] : $lang);
 
@@ -199,9 +223,16 @@ class Polyglot {
 	{
 		global $TMPL;
 		$lang = ($TMPL->fetch_param('lang') ? $TMPL->fetch_param('lang') : $this->lang());
+
+		//Return tag contents if there is no lang value
+		if ($lang == '')
+		{
+			return $TMPL->tagdata;
+		}
+
 		$format = $TMPL->fetch_param('format');
 		$value =  ($TMPL->fetch_param('value') ? $TMPL->fetch_param('value') : $TMPL->tagdata);
-		$wrap_html5 = strtolower(substr($TMPL->fetch_param('wrap_html5'), 0, 1)) == 'y';
+		$wrap_html5 = strncasecmp($TMPL->fetch_param('wrap_html5'), 'y', 1) == 0;
 		$timezone = ($TMPL->fetch_param('tz') ? $TMPL->fetch_param('tz') : $this->EE->config->item('default_site_timezone'));
 		$cldr_locale = (isset($this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale']) ? $this->EE->cache['polyglot']['lang_settings'][$lang]['cldr_locale'] : $lang);
 
@@ -212,7 +243,7 @@ class Polyglot {
 			$tz_obj = new DateTimeZone($timezone);
 		} catch (Exception $e) {
 			//TODO Log invalid date time error
-			$this->EE->logger->developer('Warning: timezone provided ('.$timezone.') couldn\'t be found, using EE default timezone.');
+			$this->EE->TMPL->log_item('Polyglot: Warning, timezone provided ('.$timezone.') couldn\'t be found, using EE default timezone.');
 			$tz_obj = new DateTimeZone($this->EE->config->item('default_site_timezone'));
 			//Assuming that EE's timezone is legit.
 		}
@@ -583,10 +614,15 @@ class Polyglot {
 	public function path()
 	{
 		global $TMPL;
-		$output_abs_path = (strtolower(substr($TMPL->fetch_param('absolute'), 0, 1)) == 'y' ? TRUE : FALSE);
+		$output_abs_path = (strncasecmp($TMPL->fetch_param('absolute'), 'y', 1) == 0);
 		$uri = $TMPL->fetch_param('uri');
-		$lang = ($TMPL->fetch_param('lang') ? $TMPL->fetch_param('lang') : $this->lang());
+		$lang = $TMPL->fetch_param('lang', $this->lang());
 
+		//Return path given if there is no lang value
+		if ($lang == '')
+		{
+			return $uri;
+		}
 
 		if($uri == '')
 		{
@@ -596,6 +632,15 @@ class Polyglot {
 		return $this->functions->translate_uri($uri, $lang, 'to_translation', $output_abs_path);
 	}
 
+
+	public function debug()
+	{
+		print_r($this->EE->cache['polyglot']);
+
+		return '';
+	}
+
+
 	public function detect_browser_lang()
 	{
 		return $this->functions->find_closest_locale();
@@ -603,22 +648,28 @@ class Polyglot {
 
 	public function languages()
 	{
+		global $TMPL;
 		$variables = array();
 		$current_lang = $this->lang();
+		$exclude_current_lang = (strncasecmp($TMPL->fetch_param('exclude_active', 'n'), 'y', 1) == 0);
 
 		foreach ($this->EE->cache['polyglot']['lang_settings'] as $lang => $settings)
 		{
-			$variable_row = array(
-				'lang'  => $lang,
-				'is_active' => ($lang == $current_lang),
-				'cldr_locale' => isset($settings['cldr_locale']) ? $settings['cldr_locale'] : $lang,
-				'url_lang' => isset($settings['url_lang']) ? $settings['url_lang'] : $lang,
-				'name' => $settings['lang_name'],
-				'dir' => $settings['dir'],
-				'ee_language' => isset($settings['ee_language']) ? $settings['ee_language'] : "english"
-			);
+			if( ! ($exclude_current_lang && $lang == $current_lang))
+			{
+				$variable_row = array(
+					'lang'  => $lang,
+					'is_active' => ($lang == $current_lang),
+					'cldr_locale' => isset($settings['cldr_locale']) ? $settings['cldr_locale'] : $lang,
+					'url_lang' => isset($settings['url_lang']) ? $settings['url_lang'] : $lang,
+					'lang_url' => $this->functions->translate_uri('/', $lang),
+					'name' => $settings['lang_name'],
+					'dir' => $settings['dir'],
+					'ee_language' => isset($settings['ee_language']) ? $settings['ee_language'] : "english"
+				);
 
-			$variables[] = $variable_row;
+				$variables[] = $variable_row;
+			}
 		}
 
 		return $this->EE->TMPL->parse_variables($this->EE->TMPL->tagdata, $variables);
