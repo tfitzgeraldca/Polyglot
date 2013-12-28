@@ -160,6 +160,7 @@ class Polyglot_ext
             else
             {
                 $this->EE->config->_global_vars[$var_prefix.'current_lang'] = '';
+                $this->EE->config->_global_vars[$var_prefix.'dir'] = 'ltr';
                 $this->EE->config->_global_vars[$var_prefix.'lang'] = '';
                 $this->EE->config->_global_vars[$var_prefix.'url_lang'] = '';
                 $this->EE->config->_global_vars[$var_prefix.'language'] = '';
@@ -180,6 +181,7 @@ class Polyglot_ext
         //TODO
         $this->EE->config->_global_vars[$var_prefix.'current_lang'] = $current_lang;
         $this->EE->config->_global_vars[$var_prefix.'lang'] = $current_lang;
+        $this->EE->config->_global_vars[$var_prefix.'dir'] = $this->EE->cache['polyglot']['lang_settings'][$current_lang]['dir'];
         $this->EE->config->_global_vars[$var_prefix.'url_lang'] = $this->EE->cache['polyglot']['lang_settings'][$current_lang]['url_lang'];
         $ee_language = $this->EE->cache['polyglot']['lang_settings'][$current_lang]['ee_langauge'];
         $this->EE->config->_global_vars[$var_prefix.'language'] = $ee_language;
@@ -276,7 +278,11 @@ class Polyglot_ext
                 if ( ! isset($lang_config['url_lang']))
                 {
                     $this->EE->cache['polyglot']['lang_settings'][$lang_config['lang']]['url_lang'] = $lang_config['lang'];
-                }                    
+                }
+                if ( ! isset($lang_config['dir']))
+                {
+                    $this->EE->cache['polyglot']['lang_settings'][$lang_config['lang']]['dir'] = 'ltr';
+                }
                 $this->EE->cache['polyglot']['lang'][$lang_config['lang']] = $lang_config['lang'];
 
                 $this->EE->cache['polyglot']['url_lang'][$lang_config['lang']] = (isset($lang_config['url_lang']) ? $lang_config['url_lang'] : $lang_config['lang']);
