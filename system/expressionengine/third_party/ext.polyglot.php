@@ -55,8 +55,9 @@ class Polyglot_ext
             'language_path' => APPPATH.'language',
             'variable_prefix' => 'polyglot:'
         );
+        $data = array();
 
-        $data = array(
+        $data[] = array(
             'class'     => __CLASS__,
             'method'    => 'init_polyglot',
             'hook'      => 'sessions_start',
@@ -65,8 +66,21 @@ class Polyglot_ext
             'version'   => $this->version,
             'enabled'   => 'y'
         );
+
+        $data[] = array(
+            'class'     => __CLASS__,
+            'method'    => 'ee_debug_toolbar_add_panel',
+            'hook'      => 'ee_debug_toolbar_add_panel',
+            'settings'  => '',
+            'priority'  => 500,
+            'version'   => $this->version,
+            'enabled'   => 'y'
+        );
     
-        $this->EE->db->insert('extensions', $data);
+        foreach ($data AS $ex)
+        {
+            $this->EE->db->insert('extensions', $ex);   
+        }
     }
 
     /**
@@ -141,6 +155,9 @@ class Polyglot_ext
 
         //Get start time (for logging puroses)
         $start_time = microtime(TRUE);
+
+        //Load the plugin's own language file
+        $this->EE->lang->loadfile('polyglot');
 
         //Load available language settings
         $this->load_languages();
@@ -336,6 +353,28 @@ class Polyglot_ext
 
         }
 
+    }
+
+    public function ee_debug_toolbar_add_panel(array $panels, array $view)
+    {
+        $panels = ($this->EE->extensions->last_call != '' ? $this->EE->extensions->last_call : $panels);
+        
+        $panels['polyglot_panel'] = new Eedt_panel_model();
+        $panels['polyglot_panel']->set_name('polyglot_panel');
+        $panels['polyglot_panel']->set_button_icon(URL_THIRD_THEMES.'polyglot/images/eedt_icon.png');
+
+        if(isset($this->EE->cache['polyglot']['current_lang']))
+        {
+            $panels['polyglot_panel']->set_button_label($this->EE->cache['polyglot']['lang_settings'][$this->EE->cache['polyglot']['current_lang']]['lang_name']);
+        }
+        else
+        {
+            $panels['polyglot_panel']->set_button_label($this->EE->lang->line("eedt_no_lang"));
+        }
+        
+        $panels['polyglot_panel']->set_panel_contents($this->EE->load->view('partials/eedt', array(), TRUE));
+        
+        return $panels;
     }
 
 }
